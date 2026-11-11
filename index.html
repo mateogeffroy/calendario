@@ -115,7 +115,7 @@ function dibujar() {
     ? `${lunes.getDate()} – ${f(fin, { day: 'numeric', month: 'long' })}`
     : `${f(lunes, { day: 'numeric', month: 'short' })} – ${f(fin, { day: 'numeric', month: 'short' })}`;
   const estado = $('estado');
-  estado.textContent = `Actualizado ${haceCuanto(datos.generado)}${aviso ? ` · ${aviso}` : ''}`;
+  estado.textContent = `Último cambio ${haceCuanto(datos.generado)}${aviso ? ` · ${aviso}` : ''}`;
   estado.classList.toggle('aviso', !!aviso);
 
   const hoy = ymd(new Date());
@@ -167,10 +167,12 @@ async function cargar() {
   } catch {
     return usarCopia('sin conexión');
   }
-  if ([401, 403, 404].includes(r.status)) {
+  if (r.status === 401 || r.status === 403) {
     localStorage.removeItem(K_TOKEN);
-    return pedirToken(r.status === 404 ? 'No se encontró calendario.json o el token no tiene acceso a codetion-datos.' : 'Token inválido o vencido.');
+    return pedirToken('Token inválido o vencido.');
   }
+  // 404: todavía no se subió calendario.json, o el token no ve codetion-datos. El token se conserva.
+  if (r.status === 404) return usarCopia('no se encontró calendario.json: sincronizá Codetion o revisá el acceso del token');
   if (!r.ok) return usarCopia(`error ${r.status}`);
   const texto = await r.text();
   try {

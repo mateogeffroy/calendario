@@ -7,9 +7,10 @@ const K_TOKEN = 'calendario.token';
 const fm = FileManager.local();
 const COPIA = fm.joinPath(fm.documentsDirectory(), 'calendario.json');
 
-const TINTA = new Color('#1c1c1f');
-const GRIS = new Color('#6f6e77');
-const SUAVE = new Color('#a1a1aa');
+const FONDO = new Color('#141416');
+const TINTA = new Color('#f2f2f5');
+const GRIS = new Color('#9a9aa3');
+const SUAVE = new Color('#5c5c66');
 
 // Parámetro del widget: vacío = eventos; "cursada" = horarios de cursada.
 const DIAS = ['domingo', 'lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado'];
@@ -106,15 +107,21 @@ function texto(stack, t, tam, color, negrita) {
 
 function fila(stack, i, tam) {
   const f = stack.addStack();
-  f.centerAlignContent();
   f.spacing = 4;
-  texto(f, '●', tam - 2, new Color(colorDe(i.materia)));
   if (i.tipo === 'cursada') {
-    texto(f, `${i.inicio}–${i.fin}`, tam, TINTA, true);
-    texto(f, i.materia.nombre, tam, TINTA);
-    if (i.aula) texto(f, i.aula, tam - 1, GRIS);
+    f.topAlignContent();
+    texto(f, '●', tam - 2, new Color(colorDe(i.materia)));
+    const t = f.addStack();
+    t.layoutVertically();
+    const nombre = texto(t, i.materia.nombre, tam, TINTA, true);
+    nombre.lineLimit = 3;
+    nombre.minimumScaleFactor = 0.8;
+    const hora = texto(t, `${i.inicio}–${i.fin}${i.aula ? ` · ${i.aula}` : ''}`, tam - 1, GRIS);
+    hora.minimumScaleFactor = 0.7;
     return;
   }
+  f.centerAlignContent();
+  texto(f, '●', tam - 2, new Color(colorDe(i.materia)));
   texto(f, i.hora ?? 'todo el día', tam, i.hora ? TINTA : GRIS, !!i.hora);
   texto(f, i.titulo, tam, TINTA, true);
   texto(f, i.materia.nombre, tam - 1, GRIS);
@@ -139,9 +146,45 @@ function columna(padre, titulo, items, max, tam, vacio = 'Libre') {
   return c;
 }
 
+const ABREV = { lunes: 'Lun', martes: 'Mar', miercoles: 'Mié', jueves: 'Jue', viernes: 'Vie', sabado: 'Sáb', domingo: 'Dom' };
+
+/** Una columna por cada día de la semana con cursada (lunes a domingo), de ancho igual. */
+function semanaCursada(w, datos, ahora) {
+  const materias = new Map(datos.materias.map(m => [m.id, m]));
+  const orden = [...DIAS.slice(1), DIAS[0]];
+  const dias = orden.filter(d => datos.cursada.some(c => c.dia === d && materias.has(c.materia)));
+  texto(w, 'Cursada', 14, TINTA, true);
+  w.addSpacer(8);
+  if (!dias.length) {
+    texto(w, 'Sin clases cargadas', 12, SUAVE);
+    return;
+  }
+  const hoy = DIAS[ahora.getDay()];
+  const ESPACIO = 6;
+  // ponytail: ancho fijo pensado para el widget grande de un iPhone de 6,1"; ajustar ANCHO si se corta en otro modelo.
+  const ANCHO = 310;
+  const ancho = (ANCHO - ESPACIO * (dias.length - 1)) / dias.length;
+  const columnas = w.addStack();
+  columnas.topAlignContent();
+  columnas.spacing = ESPACIO;
+  for (const d of dias) {
+    const col = columnas.addStack();
+    col.layoutVertically();
+    col.spacing = 8;
+    col.size = new Size(ancho, 0);
+    texto(col, ABREV[d], 12, d === hoy ? TINTA : GRIS, true);
+    const items = datos.cursada
+      .filter(c => c.dia === d && materias.has(c.materia))
+      .sort((a, b) => (a.inicio < b.inicio ? -1 : 1))
+      .map(c => ({ tipo: 'cursada', ...c, materia: materias.get(c.materia) }));
+    for (const i of items) fila(col, i, 11);
+    col.addSpacer();
+  }
+}
+
 function crearWidget({ datos, aviso, error }, modo) {
   const w = new ListWidget();
-  w.backgroundColor = Color.white();
+  w.backgroundColor = FONDO;
   w.url = URL_WEB;
   w.refreshAfterDate = new Date(Date.now() + 30 * 60 * 1000);
   w.setPadding(14, 14, 14, 14);
@@ -165,8 +208,10 @@ function crearWidget({ datos, aviso, error }, modo) {
     fila2.addSpacer(12);
     columna(fila2, 'Mañana', manana.items, 4, 12, vacio);
     fila2.addSpacer();
+  } else if (modo === 'cursada') {
+    semanaCursada(w, datos, ahora);
   } else {
-    texto(w, modo === 'cursada' ? 'Cursada · próximos 7 días' : 'Próximos 7 días', 14, TINTA, true);
+    texto(w, 'Próximos 7 días', 14, TINTA, true);
     w.addSpacer(6);
     let lineas = 0;
     const MAX = familia === 'extraLarge' ? 18 : 16;
@@ -178,7 +223,7 @@ function crearWidget({ datos, aviso, error }, modo) {
       lineas += 1 + Math.min(items.length, MAX - lineas);
       w.addSpacer(4);
     }
-    if (!lineas) texto(w, modo === 'cursada' ? 'Sin clases esta semana' : 'Semana libre', 12, SUAVE);
+    if (!lineas) texto(w, 'Semana libre', 12, SUAVE);
   }
   w.addSpacer();
   if (aviso) texto(w, aviso, 9, new Color('#c2410c'));

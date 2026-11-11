@@ -11,6 +11,9 @@ const TINTA = new Color('#1c1c1f');
 const GRIS = new Color('#6f6e77');
 const SUAVE = new Color('#a1a1aa');
 
+// Parámetro del widget: vacío = eventos; "cursada" = horarios de cursada.
+const DIAS = ['domingo', 'lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado'];
+
 // ponytail: armarDias y colorDe repiten la lógica de semana.js (Scriptable no importa módulos remotos); cambiar las dos.
 const PALETA = ['#3e63dd', '#30a46c', '#e5484d', '#b146c2', '#0894b3', '#c99a06', '#f76b15', '#d6409f'];
 const dos = (n) => String(n).padStart(2, '0');
@@ -23,16 +26,20 @@ function colorDe(materia) {
   return PALETA[h % PALETA.length];
 }
 
-/** `cantidad` días desde hoy, cada uno con sus eventos ordenados (sin hora primero). */
-function armarDias(datos, desde, cantidad) {
+/** `cantidad` días desde hoy, cada uno con sus eventos (o su cursada) ordenados; sin hora primero. */
+function armarDias(datos, desde, cantidad, modo) {
   const materias = new Map(datos.materias.map(m => [m.id, m]));
   const dias = [];
   for (let n = 0; n < cantidad; n++) {
     const d = new Date(desde.getFullYear(), desde.getMonth(), desde.getDate() + n);
     const fecha = ymd(d);
-    const items = datos.eventos
-      .filter(e => e.fecha === fecha && materias.has(e.materia))
-      .map(e => ({ tipo: 'evento', ...e, materia: materias.get(e.materia) }));
+    const items = modo === 'cursada'
+      ? datos.cursada
+        .filter(c => c.dia === DIAS[d.getDay()] && materias.has(c.materia))
+        .map(c => ({ tipo: 'cursada', ...c, hora: c.inicio, materia: materias.get(c.materia) }))
+      : datos.eventos
+        .filter(e => e.fecha === fecha && materias.has(e.materia))
+        .map(e => ({ tipo: 'evento', ...e, materia: materias.get(e.materia) }));
     items.sort((a, b) => {
       const ha = a.hora ?? '', hb = b.hora ?? '';
       return ha === hb ? 0 : ha < hb ? -1 : 1;
@@ -102,6 +109,12 @@ function fila(stack, i, tam) {
   f.centerAlignContent();
   f.spacing = 4;
   texto(f, '●', tam - 2, new Color(colorDe(i.materia)));
+  if (i.tipo === 'cursada') {
+    texto(f, `${i.inicio}–${i.fin}`, tam, TINTA, true);
+    texto(f, i.materia.nombre, tam, TINTA);
+    if (i.aula) texto(f, i.aula, tam - 1, GRIS);
+    return;
+  }
   texto(f, i.hora ?? 'todo el día', tam, i.hora ? TINTA : GRIS, !!i.hora);
   texto(f, i.titulo, tam, TINTA, true);
   texto(f, i.materia.nombre, tam - 1, GRIS);
@@ -109,24 +122,24 @@ function fila(stack, i, tam) {
 
 const nombreDia = (d) => d.toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric' });
 
-/** Eventos de hoy que no pasaron; los de todo el día siempre. */
+/** Lo de hoy que no pasó: eventos de todo el día siempre; cursada hasta que termina. */
 function pendientesDeHoy(items, ahora) {
   const hhmm = `${dos(ahora.getHours())}:${dos(ahora.getMinutes())}`;
-  return items.filter(i => !i.hora || i.hora >= hhmm);
+  return items.filter(i => (i.tipo === 'cursada' ? i.fin > hhmm : !i.hora || i.hora >= hhmm));
 }
 
-function columna(padre, titulo, items, max, tam) {
+function columna(padre, titulo, items, max, tam, vacio = 'Libre') {
   const c = padre.addStack();
   c.layoutVertically();
   c.spacing = 3;
   texto(c, titulo, tam - 1, GRIS, true);
-  if (!items.length) texto(c, 'Libre', tam, SUAVE);
+  if (!items.length) texto(c, vacio, tam, SUAVE);
   for (const i of items.slice(0, max)) fila(c, i, tam);
   if (items.length > max) texto(c, `+${items.length - max} más`, tam - 1, SUAVE);
   return c;
 }
 
-function crearWidget({ datos, aviso, error }) {
+function crearWidget({ datos, aviso, error }, modo) {
   const w = new ListWidget();
   w.backgroundColor = Color.white();
   w.url = URL_WEB;
@@ -141,22 +154,23 @@ function crearWidget({ datos, aviso, error }) {
   const ahora = new Date();
   const familia = config.widgetFamily ?? 'large';
   if (familia === 'small') {
-    const [hoy] = armarDias(datos, ahora, 1);
-    columna(w, 'Hoy', pendientesDeHoy(hoy.items, ahora), 3, 12);
+    const [hoy] = armarDias(datos, ahora, 1, modo);
+    columna(w, modo === 'cursada' ? 'Cursada hoy' : 'Hoy', pendientesDeHoy(hoy.items, ahora), 3, 12, modo === 'cursada' ? 'Sin clases' : 'Libre');
   } else if (familia === 'medium') {
-    const [hoy, manana] = armarDias(datos, ahora, 2);
+    const [hoy, manana] = armarDias(datos, ahora, 2, modo);
+    const vacio = modo === 'cursada' ? 'Sin clases' : 'Libre';
     const fila2 = w.addStack();
     fila2.topAlignContent();
-    columna(fila2, 'Hoy', pendientesDeHoy(hoy.items, ahora), 4, 12);
+    columna(fila2, 'Hoy', pendientesDeHoy(hoy.items, ahora), 4, 12, vacio);
     fila2.addSpacer(12);
-    columna(fila2, 'Mañana', manana.items, 4, 12);
+    columna(fila2, 'Mañana', manana.items, 4, 12, vacio);
     fila2.addSpacer();
   } else {
-    texto(w, 'Próximos 7 días', 14, TINTA, true);
+    texto(w, modo === 'cursada' ? 'Cursada · próximos 7 días' : 'Próximos 7 días', 14, TINTA, true);
     w.addSpacer(6);
     let lineas = 0;
     const MAX = familia === 'extraLarge' ? 18 : 16;
-    for (const [n, d] of armarDias(datos, ahora, 7).entries()) {
+    for (const [n, d] of armarDias(datos, ahora, 7, modo).entries()) {
       const items = n === 0 ? pendientesDeHoy(d.items, ahora) : d.items;
       if (!items.length || lineas >= MAX) continue;
       texto(w, n === 0 ? 'Hoy' : nombreDia(d.fecha), 12, GRIS, true);
@@ -164,14 +178,22 @@ function crearWidget({ datos, aviso, error }) {
       lineas += 1 + Math.min(items.length, MAX - lineas);
       w.addSpacer(4);
     }
-    if (!lineas) texto(w, 'Semana libre', 12, SUAVE);
+    if (!lineas) texto(w, modo === 'cursada' ? 'Sin clases esta semana' : 'Semana libre', 12, SUAVE);
   }
   w.addSpacer();
   if (aviso) texto(w, aviso, 9, new Color('#c2410c'));
   return w;
 }
 
-const widget = crearWidget(await cargar());
+let modo = (args.widgetParameter ?? '').trim().toLowerCase() === 'cursada' ? 'cursada' : 'eventos';
+if (!config.runsInWidget) {
+  const a = new Alert();
+  a.title = 'Vista previa';
+  a.addAction('Eventos');
+  a.addAction('Cursada');
+  modo = (await a.presentSheet()) === 1 ? 'cursada' : 'eventos';
+}
+const widget = crearWidget(await cargar(), modo);
 if (config.runsInWidget) Script.setWidget(widget);
 else await widget.presentLarge();
 Script.complete();

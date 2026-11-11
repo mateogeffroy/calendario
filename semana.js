@@ -1,6 +1,6 @@
 // ponytail: armarSemana y colorDe están duplicadas en widget.js (Scriptable no importa módulos remotos); cambiar las dos.
 const DIAS = ['domingo', 'lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado'];
-const PALETA = ['#3e63dd', '#30a46c', '#e5484d', '#b146c2', '#0894b3', '#c99a06', '#f76b15', '#6f6e77'];
+const PALETA = ['#3e63dd', '#30a46c', '#e5484d', '#b146c2', '#0894b3', '#c99a06', '#f76b15', '#d6409f'];
 
 const dos = (n) => String(n).padStart(2, '0');
 

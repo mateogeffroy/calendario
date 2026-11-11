@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light">
+<meta name="theme-color" content="#ffffff">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Calendario">
+<link rel="apple-touch-icon" href="icono.png">
+<link rel="icon" href="icono.png">
+<link rel="manifest" href="manifest.webmanifest">
+<title>Calendario</title>
+<style>
+  :root {
+    --tinta: #1c1c1f; --gris: #6f6e77; --suave: #a1a1aa; --linea: #e8e8ec; --fondo-dia: #fafafb; --acento: #1c1c1f;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: #fff; color: var(--tinta); }
+  body {
+    font: 15px/1.35 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+    padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+  }
+  header { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+  h1 { font-size: 22px; font-weight: 650; margin: 0; letter-spacing: -0.01em; }
+  .nav { display: flex; gap: 4px; margin-left: auto; }
+  button {
+    font: inherit; color: var(--tinta); background: #fff; border: 1px solid var(--linea); border-radius: 8px;
+    padding: 6px 12px; cursor: pointer;
+  }
+  button:hover { background: var(--fondo-dia); }
+  .estado { width: 100%; color: var(--suave); font-size: 13px; }
+  .estado.aviso { color: #c2410c; }
+  .semana { display: grid; gap: 10px; grid-template-columns: 1fr; }
+  .dia {
+    border: 1px solid var(--linea); border-radius: 12px; padding: 12px; background: #fff; min-height: 96px;
+    scroll-margin-top: 16px;
+  }
+  @media (min-width: 900px) {
+    .semana { grid-template-columns: repeat(7, minmax(0, 1fr)); }
+    .dia { min-height: calc(100vh - 120px); }
+  }
+  .dia.hoy { border: 2px solid var(--acento); padding: 11px; }
+  .dia h2 { display: flex; align-items: baseline; gap: 6px; margin: 0 0 10px; font-size: 13px; font-weight: 600; color: var(--gris); text-transform: capitalize; }
+  .dia h2 .num { font-size: 20px; color: var(--tinta); font-weight: 650; }
+  .dia.hoy h2 .num { background: var(--acento); color: #fff; border-radius: 999px; padding: 0 8px; }
+  .vacio { color: var(--suave); font-size: 13px; }
+  .item { border-radius: 8px; padding: 6px 8px; margin-bottom: 6px; font-size: 13px; overflow-wrap: anywhere; }
+  .cursada { border-left: 3px solid; border-radius: 0 6px 6px 0; color: var(--gris); padding: 3px 8px; }
+  .cursada .hora { color: var(--tinta); font-variant-numeric: tabular-nums; }
+  .evento .titulo { font-weight: 650; color: var(--tinta); }
+  .evento .hora { font-variant-numeric: tabular-nums; font-weight: 650; margin-right: 4px; }
+  .evento .todo-dia { font-weight: 500; color: var(--gris); }
+  .evento .materia { font-size: 12px; color: var(--gris); margin-top: 1px; }
+  form { max-width: 420px; margin: 12vh auto 0; }
+  form p { color: var(--gris); font-size: 14px; }
+  input { font: inherit; width: 100%; padding: 10px 12px; border: 1px solid var(--linea); border-radius: 8px; margin: 8px 0 12px; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<form id="formToken" hidden>
+  <h1>Calendario</h1>
+  <p id="errorToken" class="estado aviso" hidden></p>
+  <p>Pegá un token de GitHub <em>fine-grained</em> con acceso solo a <code>codetion-datos</code> y permiso <strong>Contents: Read-only</strong>. Se guarda solo en este dispositivo.</p>
+  <input id="token" type="password" autocomplete="off" placeholder="github_pat_…" required>
+  <button type="submit">Guardar</button>
+</form>
+<main id="app" hidden>
+  <header>
+    <h1 id="rango"></h1>
+    <div class="nav">
+      <button id="ant" aria-label="Semana anterior">←</button>
+      <button id="hoy">Hoy</button>
+      <button id="sig" aria-label="Semana siguiente">→</button>
+    </div>
+    <div id="estado" class="estado"></div>
+  </header>
+  <section id="semana" class="semana"></section>
+</main>
+<script type="module">
+import { armarSemana, colorDe, lunesDe, ymd } from './semana.js';
+
+const URL_DATOS = 'https://api.github.com/repos/mateogeffroy/codetion-datos/contents/calendario.json';
+const K_TOKEN = 'calendario.token', K_COPIA = 'calendario.copia';
+const $ = (id) => document.getElementById(id);
+
+let datos = null, lunes = lunesDe(new Date()), aviso = '';
+
+function el(tag, clase, texto) {
+  const e = document.createElement(tag);
+  if (clase) e.className = clase;
+  if (texto !== undefined) e.textContent = texto;
+  return e;
+}
+
+function haceCuanto(iso) {
+  const min = Math.round((Date.now() - new Date(iso)) / 60000);
+  if (min < 1) return 'recién';
+  if (min < 60) return `hace ${min} min`;
+  if (min < 60 * 24) return `hace ${Math.round(min / 60)} h`;
+  return `hace ${Math.round(min / 60 / 24)} días`;
+}
+
+function tinte(hex) {
+  return hex + '26'; // ~15% de opacidad
+}
+
+function dibujar() {
+  const dias = armarSemana(datos, lunes);
+  const fin = new Date(lunes.getFullYear(), lunes.getMonth(), lunes.getDate() + 6);
+  const f = (d, opts) => d.toLocaleDateString('es-AR', opts);
+  $('rango').textContent = lunes.getMonth() === fin.getMonth()
+    ? `${lunes.getDate()} – ${f(fin, { day: 'numeric', month: 'long' })}`
+    : `${f(lunes, { day: 'numeric', month: 'short' })} – ${f(fin, { day: 'numeric', month: 'short' })}`;
+  const estado = $('estado');
+  estado.textContent = `Actualizado ${haceCuanto(datos.generado)}${aviso ? ` · ${aviso}` : ''}`;
+  estado.classList.toggle('aviso', !!aviso);
+
+  const hoy = ymd(new Date());
+  const cont = $('semana');
+  cont.replaceChildren();
+  let cuadroHoy = null;
+  for (const d of dias) {
+    const [a, m, n] = d.fecha.split('-').map(Number);
+    const caja = el('article', 'dia' + (d.fecha === hoy ? ' hoy' : ''));
+    const h2 = el('h2');
+    h2.append(el('span', '', new Date(a, m - 1, n).toLocaleDateString('es-AR', { weekday: 'long' })), el('span', 'num', String(n)));
+    caja.append(h2);
+    if (!d.items.length) caja.append(el('div', 'vacio', 'Libre'));
+    for (const i of d.items) {
+      const color = colorDe(i.materia);
+      if (i.tipo === 'cursada') {
+        const c = el('div', 'item cursada');
+        c.style.borderColor = color;
+        c.append(el('span', 'hora', `${i.inicio}–${i.fin} `), `${i.materia.nombre}${i.aula ? ` · ${i.aula}` : ''}`);
+        caja.append(c);
+      } else {
+        const e = el('div', 'item evento');
+        e.style.background = tinte(color);
+        const linea = el('div');
+        linea.append(el('span', i.hora ? 'hora' : 'hora todo-dia', i.hora ?? 'todo el día'), el('span', 'titulo', i.titulo));
+        e.append(linea, el('div', 'materia', i.materia.nombre));
+        caja.append(e);
+      }
+    }
+    if (d.fecha === hoy) cuadroHoy = caja;
+    cont.append(caja);
+  }
+  if (cuadroHoy && window.matchMedia('(max-width: 899px)').matches) cuadroHoy.scrollIntoView({ block: 'start' });
+}
+
+function pedirToken(error) {
+  $('app').hidden = true;
+  $('formToken').hidden = false;
+  $('errorToken').hidden = !error;
+  $('errorToken').textContent = error ?? '';
+}
+
+async function cargar() {
+  const token = localStorage.getItem(K_TOKEN);
+  if (!token) return pedirToken();
+  let r;
+  try {
+    r = await fetch(URL_DATOS, { headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github.raw' }, cache: 'no-store' });
+  } catch {
+    return usarCopia('sin conexión');
+  }
+  if ([401, 403, 404].includes(r.status)) {
+    localStorage.removeItem(K_TOKEN);
+    return pedirToken(r.status === 404 ? 'No se encontró calendario.json o el token no tiene acceso a codetion-datos.' : 'Token inválido o vencido.');
+  }
+  if (!r.ok) return usarCopia(`error ${r.status}`);
+  const texto = await r.text();
+  try {
+    datos = JSON.parse(texto);
+  } catch {
+    return usarCopia('datos inválidos');
+  }
+  localStorage.setItem(K_COPIA, texto);
+  aviso = '';
+  mostrar();
+}
+
+function usarCopia(motivo) {
+  const copia = localStorage.getItem(K_COPIA);
+  if (!copia) {
+    $('formToken').hidden = true;
+    $('app').hidden = false;
+    $('estado').textContent = `No se pudo cargar (${motivo}) y no hay copia guardada.`;
+    $('estado').classList.add('aviso');
+    return;
+  }
+  datos = JSON.parse(copia);
+  aviso = motivo;
+  mostrar();
+}
+
+function mostrar() {
+  $('formToken').hidden = true;
+  $('app').hidden = false;
+  dibujar();
+}
+
+$('formToken').addEventListener('submit', (ev) => {
+  ev.preventDefault();
+  localStorage.setItem(K_TOKEN, $('token').value.trim());
+  $('token').value = '';
+  cargar();
+});
+const mover = (dias) => { lunes = new Date(lunes.getFullYear(), lunes.getMonth(), lunes.getDate() + dias); dibujar(); };
+$('ant').onclick = () => mover(-7);
+$('sig').onclick = () => mover(7);
+$('hoy').onclick = () => { lunes = lunesDe(new Date()); dibujar(); };
+document.addEventListener('visibilitychange', () => { if (!document.hidden && localStorage.getItem(K_TOKEN)) cargar(); });
+
+cargar();
+</script>
+</body>
+</html>

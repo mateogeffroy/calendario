@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src https://api.github.com; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; img-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="theme-color" content="#ffffff">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -205,18 +206,26 @@ async function cargar() {
   if (r.status === 404) return usarCopia('no se encontró calendario.json: sincronizá Codetion o revisá el acceso del token');
   if (!r.ok) return usarCopia(`error ${r.status}`);
   const texto = await r.text();
-  try {
-    datos = JSON.parse(texto);
-  } catch {
-    return usarCopia('datos inválidos');
-  }
+  const nuevos = leerDatos(texto);
+  if (!nuevos) return usarCopia('datos inválidos');
+  datos = nuevos;
   localStorage.setItem(K_COPIA, texto);
   aviso = '';
   mostrar();
 }
 
+/** JSON de calendario válido, o null si está roto o no tiene la forma esperada. */
+function leerDatos(texto) {
+  try {
+    const d = JSON.parse(texto);
+    return Array.isArray(d.materias) && Array.isArray(d.cursada) && Array.isArray(d.eventos) ? d : null;
+  } catch {
+    return null;
+  }
+}
+
 function usarCopia(motivo) {
-  const copia = localStorage.getItem(K_COPIA);
+  const copia = leerDatos(localStorage.getItem(K_COPIA));
   if (!copia) {
     $('formToken').hidden = true;
     $('app').hidden = false;
@@ -224,7 +233,7 @@ function usarCopia(motivo) {
     $('estado').classList.add('aviso');
     return;
   }
-  datos = JSON.parse(copia);
+  datos = copia;
   aviso = motivo;
   mostrar();
 }

@@ -15,7 +15,7 @@ const SUAVE = new Color('#5c5c66');
 // Parámetro del widget: vacío = eventos; "cursada" = horarios de cursada.
 const DIAS = ['domingo', 'lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado'];
 
-// ponytail: armarDias y colorDe repiten la lógica de semana.js (Scriptable no importa módulos remotos); cambiar las dos.
+// ponytail: colorDe repite la de semana.js (Scriptable no importa módulos remotos); cambiar las dos.
 const PALETA = ['#3e63dd', '#30a46c', '#e5484d', '#b146c2', '#0894b3', '#c99a06', '#f76b15', '#d6409f'];
 const dos = (n) => String(n).padStart(2, '0');
 const ymd = (d) => `${d.getFullYear()}-${dos(d.getMonth() + 1)}-${dos(d.getDate())}`;
@@ -27,27 +27,24 @@ function colorDe(materia) {
   return PALETA[h % PALETA.length];
 }
 
-/** `cantidad` días desde hoy, cada uno con sus eventos (o su cursada) ordenados; sin hora primero. */
-function armarDias(datos, desde, cantidad, modo) {
+/** Cursada de hoy ordenada por hora de inicio. */
+function cursadaDeHoy(datos, ahora) {
   const materias = new Map(datos.materias.map(m => [m.id, m]));
-  const dias = [];
-  for (let n = 0; n < cantidad; n++) {
-    const d = new Date(desde.getFullYear(), desde.getMonth(), desde.getDate() + n);
-    const fecha = ymd(d);
-    const items = modo === 'cursada'
-      ? datos.cursada
-        .filter(c => c.dia === DIAS[d.getDay()] && materias.has(c.materia))
-        .map(c => ({ tipo: 'cursada', ...c, hora: c.inicio, materia: materias.get(c.materia) }))
-      : datos.eventos
-        .filter(e => e.fecha === fecha && materias.has(e.materia))
-        .map(e => ({ tipo: 'evento', ...e, materia: materias.get(e.materia) }));
-    items.sort((a, b) => {
-      const ha = a.hora ?? '', hb = b.hora ?? '';
-      return ha === hb ? 0 : ha < hb ? -1 : 1;
-    });
-    dias.push({ fecha: d, items });
-  }
-  return dias;
+  return datos.cursada
+    .filter(c => c.dia === DIAS[ahora.getDay()] && materias.has(c.materia))
+    .map(c => ({ tipo: 'cursada', ...c, materia: materias.get(c.materia) }))
+    .sort((a, b) => (a.inicio < b.inicio ? -1 : 1));
+}
+
+/** Eventos desde ahora en orden: los de hoy que ya pasaron no cuentan; los de todo el día, sí. */
+function proximosEventos(datos, ahora) {
+  const materias = new Map(datos.materias.map(m => [m.id, m]));
+  const hoy = ymd(ahora);
+  const hhmm = `${dos(ahora.getHours())}:${dos(ahora.getMinutes())}`;
+  return datos.eventos
+    .filter(e => materias.has(e.materia) && (e.fecha > hoy || (e.fecha === hoy && (!e.hora || e.hora >= hhmm))))
+    .sort((a, b) => (a.fecha + (a.hora ?? '') < b.fecha + (b.hora ?? '') ? -1 : 1))
+    .map(e => ({ ...e, materia: materias.get(e.materia) }));
 }
 
 async function pedirToken(mensaje) {
@@ -93,8 +90,13 @@ async function cargar() {
 }
 
 function copia(motivo) {
-  if (!fm.fileExists(COPIA)) return { error: `Sin datos (${motivo})` };
-  return { datos: JSON.parse(fm.readString(COPIA)), aviso: motivo };
+  try {
+    const datos = JSON.parse(fm.readString(COPIA));
+    if (Array.isArray(datos.materias) && Array.isArray(datos.cursada) && Array.isArray(datos.eventos)) return { datos, aviso: motivo };
+  } catch {
+    // sin copia o copia corrupta
+  }
+  return { error: `Sin datos (${motivo})` };
 }
 
 function texto(stack, t, tam, color, negrita) {
@@ -108,31 +110,57 @@ function texto(stack, t, tam, color, negrita) {
 function fila(stack, i, tam, lineas = 3) {
   const f = stack.addStack();
   f.spacing = 4;
-  if (i.tipo === 'cursada') {
-    f.topAlignContent();
-    texto(f, '●', tam - 2, new Color(colorDe(i.materia)));
-    const t = f.addStack();
-    t.layoutVertically();
-    const nombre = texto(t, i.materia.nombre, tam, TINTA, true);
-    nombre.lineLimit = lineas;
-    nombre.minimumScaleFactor = 0.8;
-    const hora = texto(t, `${i.inicio}–${i.fin}${i.aula ? ` · ${i.aula}` : ''}`, tam - 1, GRIS);
-    hora.minimumScaleFactor = 0.7;
-    return;
-  }
-  f.centerAlignContent();
+  f.topAlignContent();
   texto(f, '●', tam - 2, new Color(colorDe(i.materia)));
-  texto(f, i.hora ?? 'todo el día', tam, i.hora ? TINTA : GRIS, !!i.hora);
-  texto(f, i.titulo, tam, TINTA, true);
-  texto(f, i.materia.nombre, tam - 1, GRIS);
+  const t = f.addStack();
+  t.layoutVertically();
+  const nombre = texto(t, i.materia.nombre, tam, TINTA, true);
+  nombre.lineLimit = lineas;
+  nombre.minimumScaleFactor = 0.8;
+  const hora = texto(t, `${i.inicio}–${i.fin}${i.aula ? ` · ${i.aula}` : ''}`, tam - 1, GRIS);
+  hora.minimumScaleFactor = 0.7;
 }
 
-const nombreDia = (d) => d.toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric' });
+/** Evento en dos líneas: título en negrita; día, hora y materia debajo. */
+function filaEvento(stack, e, ahora, conMateria) {
+  const f = stack.addStack();
+  f.spacing = 5;
+  f.topAlignContent();
+  texto(f, '●', 10, new Color(colorDe(e.materia)));
+  const t = f.addStack();
+  t.layoutVertically();
+  t.spacing = 1;
+  texto(t, e.titulo, 13, TINTA, true);
+  const manana = ymd(new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate() + 1));
+  const [a, m, d] = e.fecha.split('-').map(Number);
+  const dia = e.fecha === ymd(ahora) ? 'Hoy' : e.fecha === manana ? 'Mañana'
+    : new Date(a, m - 1, d).toLocaleDateString('es-AR', { weekday: 'short', day: 'numeric', month: 'short' });
+  const detalle = [dia, e.hora ?? 'todo el día', ...(conMateria ? [e.materia.nombre] : [])].join(' · ');
+  texto(t, detalle, 11, GRIS).minimumScaleFactor = 0.8;
+}
 
-/** Lo de hoy que no pasó: eventos de todo el día siempre; cursada hasta que termina. */
+// Cuántos eventos entran según el tamaño del widget (dos líneas por evento).
+const MAX_EVENTOS = { small: 3, medium: 3, large: 8, extraLarge: 8 };
+
+function listaEventos(w, datos, ahora, familia) {
+  const max = MAX_EVENTOS[familia] ?? 8;
+  const eventos = proximosEventos(datos, ahora);
+  if (familia === 'large' || familia === 'extraLarge') {
+    texto(w, 'Próximos eventos', 14, TINTA, true);
+    w.addSpacer(8);
+  }
+  const lista = w.addStack();
+  lista.layoutVertically();
+  lista.spacing = familia === 'small' ? 6 : 8;
+  if (!eventos.length) texto(lista, 'Sin eventos próximos', 12, SUAVE);
+  for (const e of eventos.slice(0, max)) filaEvento(lista, e, ahora, familia !== 'small');
+  if (eventos.length > max) texto(lista, `+${eventos.length - max} más`, 11, SUAVE);
+}
+
+/** Cursada de hoy que todavía no terminó. */
 function pendientesDeHoy(items, ahora) {
   const hhmm = `${dos(ahora.getHours())}:${dos(ahora.getMinutes())}`;
-  return items.filter(i => (i.tipo === 'cursada' ? i.fin > hhmm : !i.hora || i.hora >= hhmm));
+  return items.filter(i => i.fin > hhmm);
 }
 
 function columna(padre, titulo, items, max, tam, vacio = 'Libre') {
@@ -198,37 +226,9 @@ function crearWidget({ datos, aviso, error }, modo) {
   }
   const ahora = new Date();
   const familia = config.widgetFamily ?? 'large';
-  if (familia === 'small') {
-    const [hoy] = armarDias(datos, ahora, 1, modo);
-    columna(w, modo === 'cursada' ? 'Cursada hoy' : 'Hoy', pendientesDeHoy(hoy.items, ahora), 3, 12, modo === 'cursada' ? 'Sin clases' : 'Libre');
-  } else if (familia === 'medium' && modo === 'cursada') {
-    semanaCursada(w, datos, ahora, true);
-  } else if (familia === 'medium') {
-    const [hoy, manana] = armarDias(datos, ahora, 2, modo);
-    const vacio = modo === 'cursada' ? 'Sin clases' : 'Libre';
-    const fila2 = w.addStack();
-    fila2.topAlignContent();
-    columna(fila2, 'Hoy', pendientesDeHoy(hoy.items, ahora), 4, 12, vacio);
-    fila2.addSpacer(12);
-    columna(fila2, 'Mañana', manana.items, 4, 12, vacio);
-    fila2.addSpacer();
-  } else if (modo === 'cursada') {
-    semanaCursada(w, datos, ahora, false);
-  } else {
-    texto(w, 'Próximos 7 días', 14, TINTA, true);
-    w.addSpacer(6);
-    let lineas = 0;
-    const MAX = familia === 'extraLarge' ? 18 : 16;
-    for (const [n, d] of armarDias(datos, ahora, 7, modo).entries()) {
-      const items = n === 0 ? pendientesDeHoy(d.items, ahora) : d.items;
-      if (!items.length || lineas >= MAX) continue;
-      texto(w, n === 0 ? 'Hoy' : nombreDia(d.fecha), 12, GRIS, true);
-      for (const i of items.slice(0, MAX - lineas)) fila(w, i, 12);
-      lineas += 1 + Math.min(items.length, MAX - lineas);
-      w.addSpacer(4);
-    }
-    if (!lineas) texto(w, 'Semana libre', 12, SUAVE);
-  }
+  if (modo !== 'cursada') listaEventos(w, datos, ahora, familia);
+  else if (familia === 'small') columna(w, 'Cursada hoy', pendientesDeHoy(cursadaDeHoy(datos, ahora), ahora), 3, 12, 'Sin clases');
+  else semanaCursada(w, datos, ahora, familia === 'medium');
   w.addSpacer();
   if (aviso) texto(w, aviso, 9, new Color('#c2410c'));
   return w;

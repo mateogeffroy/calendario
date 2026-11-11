@@ -107,17 +107,18 @@ function texto(stack, t, tam, color, negrita) {
   return x;
 }
 
-function fila(stack, i, tam, lineas = 3) {
+/** `apagada`: la clase ya terminó; se muestra atenuada. */
+function fila(stack, i, tam, lineas = 3, apagada = false) {
   const f = stack.addStack();
   f.spacing = 4;
   f.topAlignContent();
-  texto(f, '●', tam - 2, new Color(colorDe(i.materia)));
+  texto(f, '●', tam - 2, new Color(colorDe(i.materia), apagada ? 0.4 : 1));
   const t = f.addStack();
   t.layoutVertically();
-  const nombre = texto(t, i.materia.nombre, tam, TINTA, true);
+  const nombre = texto(t, i.materia.nombre, tam, apagada ? SUAVE : TINTA, true);
   nombre.lineLimit = lineas;
   nombre.minimumScaleFactor = 0.8;
-  const hora = texto(t, `${i.inicio}–${i.fin}${i.aula ? ` · ${i.aula}` : ''}`, tam - 1, GRIS);
+  const hora = texto(t, `${i.inicio}–${i.fin}${i.aula ? ` · ${i.aula}` : ''}`, tam - 1, apagada ? SUAVE : GRIS);
   hora.minimumScaleFactor = 0.7;
 }
 
@@ -149,29 +150,31 @@ function listaEventos(w, datos, ahora, familia) {
     texto(w, 'Próximos eventos', 14, TINTA, true);
     w.addSpacer(8);
   }
-  const lista = w.addStack();
-  lista.layoutVertically();
+  const lista = alaIzquierda(w);
   lista.spacing = familia === 'small' ? 6 : 8;
   if (!eventos.length) texto(lista, 'Sin eventos próximos', 12, SUAVE);
   for (const e of eventos.slice(0, max)) filaEvento(lista, e, ahora, familia !== 'small');
   if (eventos.length > max) texto(lista, `+${eventos.length - max} más`, 11, SUAVE);
 }
 
-/** Cursada de hoy que todavía no terminó. */
-function pendientesDeHoy(items, ahora) {
-  const hhmm = `${dos(ahora.getHours())}:${dos(ahora.getMinutes())}`;
-  return items.filter(i => i.fin > hhmm);
+/** Stack vertical pegado a la izquierda: ListWidget centra lo que no ocupa todo el ancho. */
+function alaIzquierda(w) {
+  const fila = w.addStack();
+  const col = fila.addStack();
+  col.layoutVertically();
+  fila.addSpacer();
+  return col;
 }
 
-function columna(padre, titulo, items, max, tam, vacio = 'Libre') {
-  const c = padre.addStack();
-  c.layoutVertically();
-  c.spacing = 3;
-  texto(c, titulo, tam - 1, GRIS, true);
-  if (!items.length) texto(c, vacio, tam, SUAVE);
-  for (const i of items.slice(0, max)) fila(c, i, tam);
-  if (items.length > max) texto(c, `+${items.length - max} más`, tam - 1, SUAVE);
-  return c;
+/** Cursada completa de hoy; las clases que ya terminaron, atenuadas. */
+function cursadaHoy(w, datos, ahora) {
+  const c = alaIzquierda(w);
+  c.spacing = 6;
+  texto(c, 'Hoy', 11, GRIS, true);
+  const items = cursadaDeHoy(datos, ahora);
+  if (!items.length) texto(c, 'Sin clases', 12, SUAVE);
+  const hhmm = `${dos(ahora.getHours())}:${dos(ahora.getMinutes())}`;
+  for (const i of items.slice(0, 3)) fila(c, i, 12, 2, i.fin <= hhmm);
 }
 
 const ABREV = { lunes: 'Lun', martes: 'Mar', miercoles: 'Mié', jueves: 'Jue', viernes: 'Vie', sabado: 'Sáb', domingo: 'Dom' };
@@ -227,7 +230,7 @@ function crearWidget({ datos, aviso, error }, modo) {
   const ahora = new Date();
   const familia = config.widgetFamily ?? 'large';
   if (modo !== 'cursada') listaEventos(w, datos, ahora, familia);
-  else if (familia === 'small') columna(w, 'Cursada hoy', pendientesDeHoy(cursadaDeHoy(datos, ahora), ahora), 3, 12, 'Sin clases');
+  else if (familia === 'small') cursadaHoy(w, datos, ahora);
   else semanaCursada(w, datos, ahora, familia === 'medium');
   w.addSpacer();
   if (aviso) texto(w, aviso, 9, new Color('#c2410c'));

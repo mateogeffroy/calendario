@@ -105,7 +105,7 @@ function texto(stack, t, tam, color, negrita) {
   return x;
 }
 
-function fila(stack, i, tam) {
+function fila(stack, i, tam, lineas = 3) {
   const f = stack.addStack();
   f.spacing = 4;
   if (i.tipo === 'cursada') {
@@ -114,7 +114,7 @@ function fila(stack, i, tam) {
     const t = f.addStack();
     t.layoutVertically();
     const nombre = texto(t, i.materia.nombre, tam, TINTA, true);
-    nombre.lineLimit = 3;
+    nombre.lineLimit = lineas;
     nombre.minimumScaleFactor = 0.8;
     const hora = texto(t, `${i.inicio}–${i.fin}${i.aula ? ` · ${i.aula}` : ''}`, tam - 1, GRIS);
     hora.minimumScaleFactor = 0.7;
@@ -149,12 +149,14 @@ function columna(padre, titulo, items, max, tam, vacio = 'Libre') {
 const ABREV = { lunes: 'Lun', martes: 'Mar', miercoles: 'Mié', jueves: 'Jue', viernes: 'Vie', sabado: 'Sáb', domingo: 'Dom' };
 
 /** Una columna por cada día de la semana con cursada (lunes a domingo), de ancho igual. */
-function semanaCursada(w, datos, ahora) {
+function semanaCursada(w, datos, ahora, compacto) {
   const materias = new Map(datos.materias.map(m => [m.id, m]));
   const orden = [...DIAS.slice(1), DIAS[0]];
   const dias = orden.filter(d => datos.cursada.some(c => c.dia === d && materias.has(c.materia)));
-  texto(w, 'Cursada', 14, TINTA, true);
-  w.addSpacer(8);
+  if (!compacto) {
+    texto(w, 'Cursada', 14, TINTA, true);
+    w.addSpacer(8);
+  }
   if (!dias.length) {
     texto(w, 'Sin clases cargadas', 12, SUAVE);
     return;
@@ -170,14 +172,14 @@ function semanaCursada(w, datos, ahora) {
   for (const d of dias) {
     const col = columnas.addStack();
     col.layoutVertically();
-    col.spacing = 8;
+    col.spacing = compacto ? 5 : 8;
     col.size = new Size(ancho, 0);
     texto(col, ABREV[d], 12, d === hoy ? TINTA : GRIS, true);
     const items = datos.cursada
       .filter(c => c.dia === d && materias.has(c.materia))
       .sort((a, b) => (a.inicio < b.inicio ? -1 : 1))
       .map(c => ({ tipo: 'cursada', ...c, materia: materias.get(c.materia) }));
-    for (const i of items) fila(col, i, 11);
+    for (const i of items) fila(col, i, compacto ? 10 : 11, compacto ? 2 : 3);
     col.addSpacer();
   }
 }
@@ -199,6 +201,8 @@ function crearWidget({ datos, aviso, error }, modo) {
   if (familia === 'small') {
     const [hoy] = armarDias(datos, ahora, 1, modo);
     columna(w, modo === 'cursada' ? 'Cursada hoy' : 'Hoy', pendientesDeHoy(hoy.items, ahora), 3, 12, modo === 'cursada' ? 'Sin clases' : 'Libre');
+  } else if (familia === 'medium' && modo === 'cursada') {
+    semanaCursada(w, datos, ahora, true);
   } else if (familia === 'medium') {
     const [hoy, manana] = armarDias(datos, ahora, 2, modo);
     const vacio = modo === 'cursada' ? 'Sin clases' : 'Libre';
@@ -209,7 +213,7 @@ function crearWidget({ datos, aviso, error }, modo) {
     columna(fila2, 'Mañana', manana.items, 4, 12, vacio);
     fila2.addSpacer();
   } else if (modo === 'cursada') {
-    semanaCursada(w, datos, ahora);
+    semanaCursada(w, datos, ahora, false);
   } else {
     texto(w, 'Próximos 7 días', 14, TINTA, true);
     w.addSpacer(6);

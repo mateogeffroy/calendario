@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert';
-import { armarSemana, colorDe, lunesDe, ymd } from './semana.js';
+import { armarMes, armarSemana, colorDe, lunesDe, ymd } from './semana.js';
 
 const analisis = { id: 'facultad/analisis', nombre: 'Análisis', color: '#3e63dd' };
 const datos = {
@@ -53,4 +53,23 @@ test('colorDe es estable para el mismo id y respeta color', () => {
   const sin = { id: 'facultad/fisica', nombre: 'Física' };
   assert.match(colorDe(sin), /^#[0-9a-f]{6}$/);
   assert.equal(colorDe(sin), colorDe({ ...sin }));
+});
+
+test('armarMes cubre semanas completas de lunes a domingo', () => {
+  const semanas = armarMes(datos, new Date(2026, 10, 20));
+  assert.equal(semanas.length, 6); // noviembre 2026 arranca domingo
+  assert.equal(semanas[0][0].fecha, '2026-10-26');
+  assert.equal(semanas[5][6].fecha, '2026-12-06');
+  assert.ok(semanas.every(s => s.length === 7));
+});
+
+test('armarMes marca los días del mes y trae sus eventos', () => {
+  const dias = armarMes(datos, new Date(2026, 10, 1)).flat();
+  assert.equal(dias.find(d => d.fecha === '2026-10-31').delMes, false);
+  assert.equal(dias.find(d => d.fecha === '2026-11-13').delMes, true);
+  assert.equal(dias.find(d => d.fecha === '2026-11-20').items[0].titulo, 'Final');
+});
+
+test('armarMes de un mes que arranca lunes no agrega semana previa', () => {
+  assert.equal(armarMes(datos, new Date(2026, 5, 10))[0][0].fecha, '2026-06-01');
 });

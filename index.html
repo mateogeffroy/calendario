@@ -14,7 +14,7 @@
 <title>Calendario</title>
 <style>
   :root {
-    --tinta: #1c1c1f; --gris: #6f6e77; --suave: #a1a1aa; --linea: #e8e8ec; --fondo-dia: #fafafb; --acento: #1c1c1f;
+    --tinta: #1c1c1f; --gris: #6f6e77; --suave: #a1a1aa; --linea: #e8e8ec; --fondo-dia: #fafafb; --acento: #1c1c1f; --hoy: #3e63dd;
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; background: #fff; color: var(--tinta); }
@@ -32,25 +32,43 @@
   button:hover { background: var(--fondo-dia); }
   .estado { width: 100%; color: var(--suave); font-size: 13px; }
   .estado.aviso { color: #c2410c; }
-  .semana { display: grid; gap: 10px; grid-template-columns: 1fr; }
+  .mes { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+  .cab { font-size: 12px; font-weight: 600; color: var(--gris); text-align: center; padding: 4px 0; text-transform: capitalize; }
   .dia {
-    border: 1px solid var(--linea); border-radius: 12px; padding: 12px; background: #fff; min-height: 96px;
-    scroll-margin-top: 16px;
+    border: 1px solid var(--linea); border-radius: 8px; padding: 4px; background: #fff; min-height: 64px;
+    cursor: pointer; overflow: hidden; display: flex; flex-direction: column; gap: 3px;
   }
-  @media (min-width: 900px) {
-    .semana { grid-template-columns: repeat(7, minmax(0, 1fr)); }
-    .dia { min-height: calc(100vh - 120px); }
+  .dia.pasado { background: #f1f1f3; }
+  .dia.pasado .num, .dia.pasado .chip { opacity: .55; }
+  .dia.fuera .num { color: var(--suave); }
+  .dia.hoy { background: #eef2ff; border: 2px solid var(--hoy); padding: 3px; }
+  .dia.elegido:not(.hoy) { box-shadow: inset 0 0 0 2px var(--tinta); }
+  .num { font-size: 13px; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .dia.hoy .num { color: #fff; background: var(--hoy); border-radius: 999px; padding: 0 6px; align-self: flex-start; }
+  .chip {
+    font-size: 11px; line-height: 1.25; border-radius: 4px; padding: 1px 4px; border-left: 3px solid;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
-  .dia.hoy { border: 2px solid var(--acento); padding: 11px; }
-  .dia h2 { display: flex; align-items: baseline; gap: 6px; margin: 0 0 10px; font-size: 13px; font-weight: 600; color: var(--gris); text-transform: capitalize; }
-  .dia h2 .num { font-size: 20px; color: var(--tinta); font-weight: 650; }
-  .dia.hoy h2 .num { background: var(--acento); color: #fff; border-radius: 999px; padding: 0 8px; }
+  .chip .hora { font-variant-numeric: tabular-nums; font-weight: 650; margin-right: 3px; }
+  .detalle { margin-top: 16px; }
+  .detalle h2 { font-size: 15px; margin: 0 0 8px; }
   .vacio { color: var(--suave); font-size: 13px; }
-  .item { border-radius: 8px; padding: 6px 8px; margin-bottom: 6px; font-size: 13px; overflow-wrap: anywhere; }
+  .item { border-radius: 8px; padding: 6px 8px; margin-bottom: 6px; font-size: 14px; overflow-wrap: anywhere; }
   .evento .titulo { font-weight: 650; color: var(--tinta); }
   .evento .hora { font-variant-numeric: tabular-nums; font-weight: 650; margin-right: 4px; }
   .evento .todo-dia { font-weight: 500; color: var(--gris); }
   .evento .materia { font-size: 12px; color: var(--gris); margin-top: 1px; }
+  @media (min-width: 900px) {
+    .mes { gap: 6px; }
+    .dia { min-height: calc((100vh - 150px) / 6); padding: 8px; }
+    .dia.hoy { padding: 7px; }
+    .num { font-size: 15px; }
+    .chip { font-size: 12px; padding: 2px 6px; }
+    .detalle { display: none; }
+  }
+  @media (max-width: 899px) {
+    .chip .hora, .chip .materia { display: none; }
+  }
   form { max-width: 420px; margin: 12vh auto 0; }
   form p { color: var(--gris); font-size: 14px; }
   input { font: inherit; width: 100%; padding: 10px 12px; border: 1px solid var(--linea); border-radius: 8px; margin: 8px 0 12px; }
@@ -69,22 +87,23 @@
   <header>
     <h1 id="rango"></h1>
     <div class="nav">
-      <button id="ant" aria-label="Semana anterior">←</button>
+      <button id="ant" aria-label="Mes anterior">←</button>
       <button id="hoy">Hoy</button>
-      <button id="sig" aria-label="Semana siguiente">→</button>
+      <button id="sig" aria-label="Mes siguiente">→</button>
     </div>
     <div id="estado" class="estado"></div>
   </header>
-  <section id="semana" class="semana"></section>
+  <section id="mes" class="mes"></section>
+  <section id="detalle" class="detalle"></section>
 </main>
 <script type="module">
-import { armarSemana, colorDe, lunesDe, ymd } from './semana.js';
+import { armarMes, colorDe, ymd } from './semana.js';
 
 const URL_DATOS = 'https://api.github.com/repos/mateogeffroy/codetion-datos/contents/calendario.json';
 const K_TOKEN = 'calendario.token', K_COPIA = 'calendario.copia';
 const $ = (id) => document.getElementById(id);
 
-let datos = null, lunes = lunesDe(new Date()), aviso = '';
+let datos = null, mes = new Date(), elegido = ymd(new Date()), aviso = '';
 
 function el(tag, clase, texto) {
   const e = document.createElement(tag);
@@ -105,40 +124,61 @@ function tinte(hex) {
   return hex + '26'; // ~15% de opacidad
 }
 
+const CABECERA = ['lun', 'mar', 'mié', 'jue', 'vie', 'sáb', 'dom'];
+
+function eventoItem(i) {
+  const e = el('div', 'item evento');
+  e.style.background = tinte(colorDe(i.materia));
+  const linea = el('div');
+  linea.append(el('span', i.hora ? 'hora' : 'hora todo-dia', i.hora ?? 'todo el día'), el('span', 'titulo', i.titulo));
+  e.append(linea, el('div', 'materia', i.materia.nombre));
+  return e;
+}
+
 function dibujar() {
-  const dias = armarSemana(datos, lunes);
-  const fin = new Date(lunes.getFullYear(), lunes.getMonth(), lunes.getDate() + 6);
-  const f = (d, opts) => d.toLocaleDateString('es-AR', opts);
-  $('rango').textContent = lunes.getMonth() === fin.getMonth()
-    ? `${lunes.getDate()} – ${f(fin, { day: 'numeric', month: 'long' })}`
-    : `${f(lunes, { day: 'numeric', month: 'short' })} – ${f(fin, { day: 'numeric', month: 'short' })}`;
+  const titulo = mes.toLocaleDateString('es-AR', { month: 'long', year: 'numeric' });
+  $('rango').textContent = titulo[0].toUpperCase() + titulo.slice(1);
   const estado = $('estado');
   estado.textContent = `Último cambio ${haceCuanto(datos.generado)}${aviso ? ` · ${aviso}` : ''}`;
   estado.classList.toggle('aviso', !!aviso);
 
   const hoy = ymd(new Date());
-  const cont = $('semana');
-  cont.replaceChildren();
-  let cuadroHoy = null;
-  for (const d of dias) {
-    const [a, m, n] = d.fecha.split('-').map(Number);
-    const caja = el('article', 'dia' + (d.fecha === hoy ? ' hoy' : ''));
-    const h2 = el('h2');
-    h2.append(el('span', '', new Date(a, m - 1, n).toLocaleDateString('es-AR', { weekday: 'long' })), el('span', 'num', String(n)));
-    caja.append(h2);
-    if (!d.items.length) caja.append(el('div', 'vacio', 'Libre'));
+  const cont = $('mes');
+  cont.replaceChildren(...CABECERA.map(c => el('div', 'cab', c)));
+  const semanas = armarMes(datos, mes);
+  for (const d of semanas.flat()) {
+    const clases = ['dia'];
+    if (d.fecha < hoy) clases.push('pasado');
+    if (d.fecha === hoy) clases.push('hoy');
+    if (!d.delMes) clases.push('fuera');
+    if (d.fecha === elegido) clases.push('elegido');
+    const caja = el('div', clases.join(' '));
+    caja.append(el('span', 'num', String(Number(d.fecha.slice(8)))));
     for (const i of d.items) {
-      const e = el('div', 'item evento');
-      e.style.background = tinte(colorDe(i.materia));
-      const linea = el('div');
-      linea.append(el('span', i.hora ? 'hora' : 'hora todo-dia', i.hora ?? 'todo el día'), el('span', 'titulo', i.titulo));
-      e.append(linea, el('div', 'materia', i.materia.nombre));
-      caja.append(e);
+      const chip = el('div', 'chip');
+      const color = colorDe(i.materia);
+      chip.style.borderColor = color;
+      chip.style.background = tinte(color);
+      chip.title = `${i.hora ?? 'todo el día'} ${i.titulo} · ${i.materia.nombre}`;
+      if (i.hora) chip.append(el('span', 'hora', i.hora));
+      chip.append(i.titulo);
+      caja.append(chip);
     }
-    if (d.fecha === hoy) cuadroHoy = caja;
+    caja.onclick = () => { elegido = d.fecha; dibujar(); };
     cont.append(caja);
   }
-  if (cuadroHoy && window.matchMedia('(max-width: 899px)').matches) cuadroHoy.scrollIntoView({ block: 'start' });
+
+  // Detalle del día elegido: en el celular los cuadros son chicos para leer los eventos.
+  const det = $('detalle');
+  const dia = semanas.flat().find(d => d.fecha === elegido);
+  det.replaceChildren();
+  if (dia) {
+    const [a, m, n] = dia.fecha.split('-').map(Number);
+    const t = new Date(a, m - 1, n).toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' });
+    det.append(el('h2', '', t[0].toUpperCase() + t.slice(1)));
+    if (!dia.items.length) det.append(el('div', 'vacio', 'Sin eventos'));
+    for (const i of dia.items) det.append(eventoItem(i));
+  }
 }
 
 function pedirToken(error) {
@@ -201,10 +241,10 @@ $('formToken').addEventListener('submit', (ev) => {
   $('token').value = '';
   cargar();
 });
-const mover = (dias) => { lunes = new Date(lunes.getFullYear(), lunes.getMonth(), lunes.getDate() + dias); dibujar(); };
-$('ant').onclick = () => mover(-7);
-$('sig').onclick = () => mover(7);
-$('hoy').onclick = () => { lunes = lunesDe(new Date()); dibujar(); };
+const mover = (n) => { mes = new Date(mes.getFullYear(), mes.getMonth() + n, 1); dibujar(); };
+$('ant').onclick = () => mover(-1);
+$('sig').onclick = () => mover(1);
+$('hoy').onclick = () => { mes = new Date(); elegido = ymd(mes); dibujar(); };
 document.addEventListener('visibilitychange', () => { if (!document.hidden && localStorage.getItem(K_TOKEN)) cargar(); });
 
 cargar();

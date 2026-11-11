@@ -43,3 +43,14 @@ export function armarSemana(datos, lunes) {
   }
   return dias;
 }
+
+/** Semanas completas (lunes a domingo) que cubren el mes de `fecha`; cada día lleva `delMes`. */
+export function armarMes(datos, fecha) {
+  const mes = fecha.getMonth();
+  const ultimo = new Date(fecha.getFullYear(), mes + 1, 0);
+  const semanas = [];
+  for (let l = lunesDe(new Date(fecha.getFullYear(), mes, 1)); l <= ultimo; l = new Date(l.getFullYear(), l.getMonth(), l.getDate() + 7)) {
+    semanas.push(armarSemana(datos, l).map(d => ({ ...d, delMes: Number(d.fecha.slice(5, 7)) === mes + 1 })));
+  }
+  return semanas;
+}

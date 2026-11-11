@@ -24,9 +24,7 @@ export function colorDe(materia) {
   return PALETA[h % PALETA.length];
 }
 
-const horaDe = (i) => i.hora ?? i.inicio;
-
-/** 7 días desde `lunes`, cada uno con su cursada y sus eventos ordenados. */
+/** 7 días desde `lunes`, cada uno con sus eventos ordenados (sin hora primero). */
 export function armarSemana(datos, lunes) {
   const materias = new Map(datos.materias.map(m => [m.id, m]));
   const dias = [];
@@ -34,14 +32,12 @@ export function armarSemana(datos, lunes) {
     const d = new Date(lunes.getFullYear(), lunes.getMonth(), lunes.getDate() + n);
     const fecha = ymd(d);
     const dia = DIAS[d.getDay()];
-    const items = [
-      ...datos.cursada.filter(c => c.dia === dia).map(c => ({ tipo: 'cursada', ...c, materia: materias.get(c.materia) })),
-      ...datos.eventos.filter(e => e.fecha === fecha).map(e => ({ tipo: 'evento', ...e, materia: materias.get(e.materia) })),
-    ].filter(i => i.materia);
+    const items = datos.eventos
+      .filter(e => e.fecha === fecha && materias.has(e.materia))
+      .map(e => ({ tipo: 'evento', ...e, materia: materias.get(e.materia) }));
     items.sort((a, b) => {
-      const ha = horaDe(a) ?? '', hb = horaDe(b) ?? '';
-      if (ha !== hb) return ha < hb ? -1 : 1; // '' (todo el día) primero
-      return a.tipo === b.tipo ? 0 : a.tipo === 'evento' ? -1 : 1;
+      const ha = a.hora ?? '', hb = b.hora ?? ''; // '' (todo el día) primero
+      return ha === hb ? 0 : ha < hb ? -1 : 1;
     });
     dias.push({ fecha, dia, items });
   }

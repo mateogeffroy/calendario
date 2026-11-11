@@ -22,11 +22,10 @@ test('armarSemana devuelve 7 días de lunes a domingo', () => {
   assert.deepEqual(s.map(d => d.dia), ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo']);
 });
 
-test('repite la cursada cada semana', () => {
-  const cursada = (l) => armarSemana(datos, lunes(l))[4].items.filter(i => i.tipo === 'cursada');
-  assert.equal(cursada('2026-11-09')[0].inicio, '18:00');
-  assert.equal(cursada('2026-11-16')[0].inicio, '18:00');
-  assert.equal(armarSemana(datos, lunes('2026-11-16'))[4].fecha, '2026-11-20');
+test('no muestra la cursada, solo eventos', () => {
+  const items = armarSemana(datos, lunes('2026-11-09')).flatMap(d => d.items);
+  assert.ok(items.length > 0);
+  assert.ok(items.every(i => i.tipo === 'evento'));
 });
 
 test('solo incluye eventos de la semana', () => {
@@ -34,9 +33,9 @@ test('solo incluye eventos de la semana', () => {
   assert.equal(titulos.includes('Final'), false);
 });
 
-test('ordena todo el día, luego por hora, evento antes que cursada', () => {
+test('ordena todo el día y luego por hora', () => {
   const v = armarSemana(datos, lunes('2026-11-09'))[4].items;
-  assert.deepEqual(v.map(i => `${i.tipo} ${i.hora ?? i.inicio ?? '-'}`), ['evento -', 'evento 10:00', 'evento 18:00', 'cursada 18:00']);
+  assert.deepEqual(v.map(i => `${i.tipo} ${i.hora ?? i.inicio ?? '-'}`), ['evento -', 'evento 10:00', 'evento 18:00']);
   assert.equal(v[0].materia.nombre, 'Análisis');
 });
 

@@ -47,8 +47,6 @@
   .dia.hoy h2 .num { background: var(--acento); color: #fff; border-radius: 999px; padding: 0 8px; }
   .vacio { color: var(--suave); font-size: 13px; }
   .item { border-radius: 8px; padding: 6px 8px; margin-bottom: 6px; font-size: 13px; overflow-wrap: anywhere; }
-  .cursada { border-left: 3px solid; border-radius: 0 6px 6px 0; color: var(--gris); padding: 3px 8px; }
-  .cursada .hora { color: var(--tinta); font-variant-numeric: tabular-nums; }
   .evento .titulo { font-weight: 650; color: var(--tinta); }
   .evento .hora { font-variant-numeric: tabular-nums; font-weight: 650; margin-right: 4px; }
   .evento .todo-dia { font-weight: 500; color: var(--gris); }
@@ -130,20 +128,12 @@ function dibujar() {
     caja.append(h2);
     if (!d.items.length) caja.append(el('div', 'vacio', 'Libre'));
     for (const i of d.items) {
-      const color = colorDe(i.materia);
-      if (i.tipo === 'cursada') {
-        const c = el('div', 'item cursada');
-        c.style.borderColor = color;
-        c.append(el('span', 'hora', `${i.inicio}–${i.fin} `), `${i.materia.nombre}${i.aula ? ` · ${i.aula}` : ''}`);
-        caja.append(c);
-      } else {
-        const e = el('div', 'item evento');
-        e.style.background = tinte(color);
-        const linea = el('div');
-        linea.append(el('span', i.hora ? 'hora' : 'hora todo-dia', i.hora ?? 'todo el día'), el('span', 'titulo', i.titulo));
-        e.append(linea, el('div', 'materia', i.materia.nombre));
-        caja.append(e);
-      }
+      const e = el('div', 'item evento');
+      e.style.background = tinte(colorDe(i.materia));
+      const linea = el('div');
+      linea.append(el('span', i.hora ? 'hora' : 'hora todo-dia', i.hora ?? 'todo el día'), el('span', 'titulo', i.titulo));
+      e.append(linea, el('div', 'materia', i.materia.nombre));
+      caja.append(e);
     }
     if (d.fecha === hoy) cuadroHoy = caja;
     cont.append(caja);

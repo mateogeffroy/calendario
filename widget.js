@@ -12,7 +12,6 @@ const GRIS = new Color('#6f6e77');
 const SUAVE = new Color('#a1a1aa');
 
 // ponytail: armarDias y colorDe repiten la lógica de semana.js (Scriptable no importa módulos remotos); cambiar las dos.
-const DIAS = ['domingo', 'lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado'];
 const PALETA = ['#3e63dd', '#30a46c', '#e5484d', '#b146c2', '#0894b3', '#c99a06', '#f76b15', '#d6409f'];
 const dos = (n) => String(n).padStart(2, '0');
 const ymd = (d) => `${d.getFullYear()}-${dos(d.getMonth() + 1)}-${dos(d.getDate())}`;
@@ -24,24 +23,19 @@ function colorDe(materia) {
   return PALETA[h % PALETA.length];
 }
 
-const horaDe = (i) => i.hora ?? i.inicio;
-
-/** `cantidad` días desde hoy, cada uno con su cursada y sus eventos ordenados. */
+/** `cantidad` días desde hoy, cada uno con sus eventos ordenados (sin hora primero). */
 function armarDias(datos, desde, cantidad) {
   const materias = new Map(datos.materias.map(m => [m.id, m]));
   const dias = [];
   for (let n = 0; n < cantidad; n++) {
     const d = new Date(desde.getFullYear(), desde.getMonth(), desde.getDate() + n);
     const fecha = ymd(d);
-    const dia = DIAS[d.getDay()];
-    const items = [
-      ...datos.cursada.filter(c => c.dia === dia).map(c => ({ tipo: 'cursada', ...c, materia: materias.get(c.materia) })),
-      ...datos.eventos.filter(e => e.fecha === fecha).map(e => ({ tipo: 'evento', ...e, materia: materias.get(e.materia) })),
-    ].filter(i => i.materia);
+    const items = datos.eventos
+      .filter(e => e.fecha === fecha && materias.has(e.materia))
+      .map(e => ({ tipo: 'evento', ...e, materia: materias.get(e.materia) }));
     items.sort((a, b) => {
-      const ha = horaDe(a) ?? '', hb = horaDe(b) ?? '';
-      if (ha !== hb) return ha < hb ? -1 : 1;
-      return a.tipo === b.tipo ? 0 : a.tipo === 'evento' ? -1 : 1;
+      const ha = a.hora ?? '', hb = b.hora ?? '';
+      return ha === hb ? 0 : ha < hb ? -1 : 1;
     });
     dias.push({ fecha: d, items });
   }
@@ -107,18 +101,18 @@ function fila(stack, i, tam) {
   const f = stack.addStack();
   f.centerAlignContent();
   f.spacing = 4;
-  texto(f, i.tipo === 'evento' ? '●' : '○', tam - 2, new Color(colorDe(i.materia)));
-  const hora = i.tipo === 'evento' ? (i.hora ?? 'todo el día') : i.inicio;
-  texto(f, hora, tam, i.tipo === 'evento' ? TINTA : GRIS, i.tipo === 'evento');
-  texto(f, i.tipo === 'evento' ? i.titulo : i.materia.nombre, tam, i.tipo === 'evento' ? TINTA : GRIS, i.tipo === 'evento');
+  texto(f, '●', tam - 2, new Color(colorDe(i.materia)));
+  texto(f, i.hora ?? 'todo el día', tam, i.hora ? TINTA : GRIS, !!i.hora);
+  texto(f, i.titulo, tam, TINTA, true);
+  texto(f, i.materia.nombre, tam - 1, GRIS);
 }
 
 const nombreDia = (d) => d.toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric' });
 
-/** Elementos de hoy que no terminaron: eventos sin hora siempre; cursada hasta su fin. */
+/** Eventos de hoy que no pasaron; los de todo el día siempre. */
 function pendientesDeHoy(items, ahora) {
   const hhmm = `${dos(ahora.getHours())}:${dos(ahora.getMinutes())}`;
-  return items.filter(i => (i.tipo === 'cursada' ? i.fin > hhmm : !i.hora || i.hora >= hhmm));
+  return items.filter(i => !i.hora || i.hora >= hhmm);
 }
 
 function columna(padre, titulo, items, max, tam) {

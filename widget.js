@@ -107,18 +107,17 @@ function texto(stack, t, tam, color, negrita) {
   return x;
 }
 
-/** `apagada`: la clase ya terminó; se muestra atenuada. */
-function fila(stack, i, tam, lineas = 3, apagada = false) {
+function fila(stack, i, tam, lineas = 3) {
   const f = stack.addStack();
   f.spacing = 4;
   f.topAlignContent();
-  texto(f, '●', tam - 2, new Color(colorDe(i.materia), apagada ? 0.4 : 1));
+  texto(f, '●', tam - 2, new Color(colorDe(i.materia)));
   const t = f.addStack();
   t.layoutVertically();
-  const nombre = texto(t, i.materia.nombre, tam, apagada ? SUAVE : TINTA, true);
+  const nombre = texto(t, i.materia.nombre, tam, TINTA, true);
   nombre.lineLimit = lineas;
   nombre.minimumScaleFactor = 0.8;
-  const hora = texto(t, `${i.inicio}–${i.fin}${i.aula ? ` · ${i.aula}` : ''}`, tam - 1, apagada ? SUAVE : GRIS);
+  const hora = texto(t, `${i.inicio}–${i.fin}${i.aula ? ` · ${i.aula}` : ''}`, tam - 1, GRIS);
   hora.minimumScaleFactor = 0.7;
 }
 
@@ -166,15 +165,14 @@ function alaIzquierda(w) {
   return col;
 }
 
-/** Cursada completa de hoy; las clases que ya terminaron, atenuadas. */
+/** Cursada completa de hoy. */
 function cursadaHoy(w, datos, ahora) {
   const c = alaIzquierda(w);
   c.spacing = 6;
   texto(c, 'Hoy', 11, GRIS, true);
   const items = cursadaDeHoy(datos, ahora);
   if (!items.length) texto(c, 'Sin clases', 12, SUAVE);
-  const hhmm = `${dos(ahora.getHours())}:${dos(ahora.getMinutes())}`;
-  for (const i of items.slice(0, 3)) fila(c, i, 12, 2, i.fin <= hhmm);
+  for (const i of items.slice(0, 3)) fila(c, i, 12, 2);
 }
 
 const ABREV = { lunes: 'Lun', martes: 'Mar', miercoles: 'Mié', jueves: 'Jue', viernes: 'Vie', sabado: 'Sáb', domingo: 'Dom' };
